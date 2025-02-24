@@ -1,0 +1,108 @@
+---
+title: "regresionlineal"
+author: "hanniazenteno"
+format: pdf
+editor: visual
+---
+
+```{r}
+install.packages("tidyverse")
+```
+
+```{r}
+library(tidyverse)
+```
+
+
+```{r}
+p_load(carData, tidyverse)
+```
+
+```{r}
+d<-carData::TitanicSurvival%>%filter(!(is.na(age)))
+str(d)
+```
+
+```{r}
+length(d$survived)
+nlevels(d$survived) #numero de niveles
+```
+
+```{r}
+  modelo1<-glm(survived~sex+age+passengerClass,data=d,family=binomial)
+summary(modelo1)
+```
+
+```{r}
+#plantear ecuacion
+#beta0=intercepto
+```
+
+```{r}
+#ODDRatios que es lo que nos indican los coeficientes
+exp(modelo1$coefficients)
+```
+por cada que aumente nuestra variable independiente el evento aumenta x veces
+
+```{r}
+modelo1$fitted.values
+```
+
+```{r}
+#clasificar con base en la probabilidad
+d$predicho<-as.numeric(modelo1$fitted.values>=.05)
+```
+
+```{r}
+p_load(MASS)
+head(Pima.tr)
+```
+
+```{r}
+diabetes.model <- glm(type~bmi,data=Pima.tr,family="binomial"(link=logit))
+summary(diabetes.model)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
