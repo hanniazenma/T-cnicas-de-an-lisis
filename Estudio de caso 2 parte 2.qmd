@@ -1,0 +1,312 @@
+---
+title: "Estudio de caso II"
+author: "Pulido Balderas Arturo, Ibarra Piñón Scarlett Adriana y Zenteno Magaña Hannia Sharit "
+format: html
+editor: visual
+---
+
+El siguiente análisis se desarrolla de dos modelos con enfoques distintos:
+
+1.  Primer modelo de red: Se construye a partir de las correlaciones entre las distribuciones mensuales de incendios de cada año. Este modelo busca identificar similitudes en los patrones temporales, sin enfocarse únicamente en la magnitud total de los incendios.
+
+2.  Segundo modelo de red: Se basa en la cantidad total de incendios por año, conectando aquellos años cuya diferencia en número total sea menor a un umbral definido. Este modelo permite agrupar años con niveles de impacto similares, independientemente de cómo se distribuyeron los incendios dentro del año.
+
+Ambos enfoques complementan la comprensión del fenómeno desde distintas perspectivas: uno analiza la forma del comportamiento anual, y el otro su magnitud total. Además, se aplican métricas de red para identificar años clave en la dinámica de incendios, y se generan visualizaciones que facilitan la interpretación de los patrones detectados.
+
+Instalación de paquetes
+
+```{r}
+  
+install.packages("visNetwork")  
+library(igraph)
+library(tidyverse)
+library(visNetwork)
+```
+
+```{r}
+library(dplyr)      
+library(ggplot2)
+```
+
+Base de datos
+
+```{r}
+amazonas<-read.csv("amazon.csv")
+#View(amazonas)
+head(amazonas)
+```
+
+Análisis de datos
+
+Convertimos variables de tipo texto a factores
+
+```{r}
+amazonas <- amazonas %>% mutate_if(is.character, as.factor)
+summary(amazonas)
+```
+
+Procesamiento de datos
+
+```{r}
+# Agrupación por año y estado
+datos_agrupados <- amazonas %>%
+  group_by(year, state) %>%
+  summarise(total_amazonas = sum(number), .groups = 'drop')
+```
+
+```{r}
+# Matriz de correlación entre años
+matriz_correlacion <- datos_agrupados %>%
+  pivot_wider(names_from = state, values_from = total_amazonas) %>%
+  select(-year) %>%
+  cor(use = "complete.obs") %>%  # Correlación entre años
+  as.matrix()
+```
+
+Definimos un umbral minimo de correlacion
+
+```{r}
+# Umbral para conexiones significativas (correlación > 0.7)
+matriz_adyacencia <- matriz_correlacion
+matriz_adyacencia[abs(matriz_adyacencia) < 0.7] <- 0
+diag(matriz_adyacencia) <- 0  # Eliminar autoconexiones
+```
+
+Grafo
+
+```{r}
+grafo <- graph_from_adjacency_matrix(
+  matriz_adyacencia,
+  mode = "undirected",
+  weighted = TRUE,
+  diag = FALSE
+)
+
+```
+
+```{r}
+# Convertir los años a mismo tipo de datos 
+datos_anuales <- datos_agrupados %>%
+  group_by(year) %>%
+  summarise(total = sum(total_amazonas)) %>%
+  mutate(year = as.character(year))  # Convertir a character
+
+# Dataframe con años del grafo 
+todos_los_años <- data.frame(year = V(grafo)$name)
+
+datos_completos <- todos_los_años %>%
+  left_join(datos_anuales, by = "year") %>%
+  mutate(total = ifelse(is.na(total), 0, total))  
+
+
+V(grafo)$amazonas_totales <- datos_completos$total
+
+# tendencia
+V(grafo)$tendencia <- ifelse(
+  V(grafo)$amazonas_totales > mean(V(grafo)$amazonas_totales, na.rm = TRUE),
+  "Alta", "Baja")
+```
+
+Visualización estadística
+
+```{r}
+visualizar_red_segura <- function(grafo) {
+  # atributos críticos
+  if(!all(c("name", "amazonas_totales", "tendencia") %in% vertex_attr_names(grafo))) {
+    stop("Faltan atributos necesarios en el grafo")
+  }
+  
+  # layout 
+  layouts <- list(
+    tryCatch(layout_with_fr(grafo), error = function(e) NULL),
+    tryCatch(layout_with_kk(grafo), error = function(e) NULL),
+    tryCatch(layout_with_drl(grafo), error = function(e) NULL)
+  )
+  
+  # layout válido
+  layout <- NULL
+  for(l in layouts) {
+    if(!is.null(l) && all(is.finite(l))) {
+      layout <- l
+      break
+    }
+  }
+  
+  if(is.null(layout)) {
+    layout <- layout_in_circle(grafo)
+    warning("Usando layout circular como último recurso")
+  }
+  
+  # parámetros visuales
+  tamanos_nodos <- pmin(pmax(scale(V(grafo)$amazonas_totales) * 10 + 5, 3), 20)
+  
+  plot(grafo,
+       layout = layout,
+       vertex.label = V(grafo)$name,
+       vertex.size = tamanos_nodos,
+       vertex.color = colores[V(grafo)$tendencia],
+       vertex.frame.color = "white",
+       vertex.label.color = "black",
+       vertex.label.cex = 0.8,
+       edge.width = E(grafo)$weight * 3,
+       edge.color = adjustcolor("gray50", alpha.f = 0.7),
+       main = "Red de Correlación Anual de Incendios en Brasil")
+  
+  # Leyenda 
+  legend("topleft",
+         legend = c(paste("Tendencia Alta (n =", sum(V(grafo)$tendencia == "Alta"), ")"),
+                   paste("Tendencia Baja (n =", sum(V(grafo)$tendencia == "Baja"), ")")),
+         pt.bg = c("#ff7f0e", "#1f77b4"),
+         pch = 21,
+         pt.cex = 1.5,
+         bty = "n")
+}
+```
+
+Visualización interactiva
+
+```{r}
+# limpiar texto
+limpiar_texto_definitivo <- function(x) {
+  # Convertir a ASCII primero
+  x <- iconv(x, "UTF-8", "ASCII//TRANSLIT", sub = " ")
+  
+  # Expresión regular 
+  x <- gsub("[^[:alnum:][:space:]_-]", "", x, perl = TRUE)
+  
+  # Eliminar múltiples espacios
+  x <- gsub("\\s+", " ", x)
+  
+  return(trimws(x))
+}
+
+# Preparar nodos 
+nodes <- data.frame(
+  id = V(grafo)$name,
+  label = limpiar_texto_definitivo(V(grafo)$name),
+  value = V(grafo)$amazonas_totales,
+  title = paste(
+    "Año:", limpiar_texto_definitivo(V(grafo)$name), 
+    "<br>Total incendios:", V(grafo)$amazonas_totales,
+    "<br>Tendencia:", limpiar_texto_definitivo(V(grafo)$tendencia)
+  ),
+  color = ifelse(V(grafo)$tendencia == "Alta", "#ff7f0e", "#1f77b4"),
+  shadow = TRUE,
+  stringsAsFactors = FALSE
+)
+
+# Preparar bordes con texto limpio
+limpiar_texto <- function(x) {
+  x <- iconv(x, "UTF-8", "ASCII//TRANSLIT", sub = " ")
+  x <- gsub("[^[:alnum:] ]", "", x)
+  return(x)
+}
+
+# bordes 
+edges <- get.data.frame(grafo, what = "edges") %>%
+  mutate(
+    from = as.character(from),
+    to = as.character(to),
+    title = paste("Correlación:", round(weight, 2)),
+    value = abs(weight),
+    label = limpiar_texto(as.character(weight))
+  ) %>%
+  filter(!is.na(weight))  
+
+# Verificar el resultado
+head(edges)
+```
+
+Análisis temporal
+
+```{r}
+ggplot(datos_agrupados %>% 
+         group_by(year) %>% 
+         summarise(total = sum(total_amazonas)), 
+       aes(x = year, y = total)) +
+  geom_line(color = "#ff7f0e", size = 1.5) +
+  geom_point(color = "#1f77b4", size = 3) +
+  labs(title = "Evolución Anual de Incendios en Brasil",
+       x = "Año",
+       y = "Número Total de Incendios") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+```
+
+Con base en las agrupaciones hechas de incendios por localidad, se identificaron dos picos pronunciados en 2005 y 2010, lo que demostraba que los incendios superaron 30,000 de ocurrencias, entre estos datos del 2005 se alcanzo cerca de 35,000-40,000 incendios, se puede hacer una relación entre el incremento de incendios y los años, puesto que con base en las agrupaciones y las representaciones de los nodos estos han aumentado de forma constante.
+
+Métricas de red
+
+```{r}
+metricas <- data.frame(
+  Año = V(grafo)$name,
+  Grado = degree(grafo),
+  Intermediación = betweenness(grafo),
+  Cercanía = closeness(grafo),
+  Amazonas_Totales = V(grafo)$amazonas_totales,
+  Tendencia = V(grafo)$tendencia
+)
+
+# Mostrar métricas ordenadas por año
+print(metricas %>% arrange(Año))
+```
+
+Muestra que la mayoría de incendios no están relacionados en base a su localidad, sólo se muestra una relación entre Alagoas y Espírito Santo que tienen un valor de1.239, lo que sugiere que están conectados a algún otro nodo. Se puede inferir que el incremento de incendios está más relacionado a la época del año que a la localidad.
+
+Modelo de Redes
+
+```{r}
+# Agrupamos por año y sumamos el número total de incendios
+incendio_anual <- amazon %>%
+  group_by(year) %>%
+  summarise(total_fires = sum(number, na.rm = TRUE)) %>%
+  arrange(year)
+incendio_anual
+```
+
+```{r}
+# Creamos las conexiones: años con número de incendios similares (diferencia <= 5000)
+diferencia <- 5000 
+conexiones <- expand.grid(from = incendio_anual$year, to = incendio_anual$year) %>%
+  filter(from < to) %>%
+  left_join(incendio_anual, by = c("from" = "year")) %>%
+  rename(fires_from = total_fires) %>%
+  left_join(incendio_anual, by = c("to" = "year")) %>%
+  rename(fires_to = total_fires) %>%
+  filter(abs(fires_from - fires_to) <= diferencia)
+```
+
+```{r}
+# Renombramosla variable years para poder trabajar con ella
+incendio_anual$name <- as.character(incendio_anual$year)  # 'name' debe ser carácter
+```
+
+```{r}
+# Creamos el grafo
+grafo <- graph_from_data_frame(conexiones, vertices = incendio_anual, directed = FALSE)
+```
+
+```{r}
+#Visualizamos con ggraph
+ggraph(grafo, layout = "circle") + 
+  geom_edge_link(color = "gray70") +
+  geom_node_point(aes(size = total_incendios), color = "pink", alpha = 0.7) +
+  geom_node_text(aes(label = name), repel = TRUE, size = 4) + 
+  scale_size_continuous(range = c(3, 10)) +
+  theme_void() +
+  ggtitle("Red de años con número total de incendios similares en Brasil") +
+  labs(
+    title = "Red de años con cantidades similares de incendios en Brasil",
+    subtitle = "Conexiones entre años con total de incendios cercanos",
+    caption = "Fuente: https://www.kaggle.com/datasets/gustavomodelli/forest-fires-in-brazil"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5, size = 12),
+    plot.caption = element_text(size = 8, color = "gray50"),
+    legend.position = "right",
+    panel.grid = element_blank()
+  )
+```
+
+Este segundo análisis revela agrupamientos de años que, a pesar de estar distantes en el tiempo, comparten niveles similares de incendios. En la visualización se aprecian clústeres de años conectados por este criterio de similitud, lo que sugiere que hay periodos recurrentes donde el impacto de los incendios fue comparable. Este enfoque ayuda a identificar años atípicos (que no se conectan con otros) y aumenta la comprensión global del comportamiento histórico de los incendios en la región.
