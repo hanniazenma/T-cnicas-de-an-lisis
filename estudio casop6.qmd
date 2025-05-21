@@ -1,0 +1,302 @@
+---
+title: "Datas"
+author: "HanniaZenteno, ValeryChirino"
+format: html
+editor: visual
+---
+
+La movilidad urbana en México, y particularmente en la Ciudad de México, representa uno de los mayores retos contemporáneos en términos ambientales, sociales y de salud pública. La combinación de una población densa, una urbanización compleja y una fuerte dependencia del transporte motorizado —ya sea privado, de carga o público— ha derivado en una problemática crítica que se manifiesta en la calidad del aire, el bienestar social y el cambio climático. Según Climate Watch (2022), México emitió aproximadamente 637 millones de toneladas de CO₂ equivalente, y las fuentes móviles —vehículos motorizados en circulación— constituyen un actor determinante en estas cifras. Estas fuentes móviles son responsables de la emisión de gases de efecto invernadero (GEI) como el dióxido de carbono (CO₂), el metano (CH₄) y el óxido nitroso (N₂O), representando en conjunto el 97% del total de emisiones móviles del país. La Secretaría de Medio Ambiente y Recursos Naturales (SEMARNAT) confirma que una cuarta parte del total nacional de emisiones de GEI proviene del sector transporte, lo que refuerza su relevancia en el deterioro ambiental y sus consecuencias sobre la salud pública.
+
+```{r}
+#Instalamos las paqueterías necesarias para la manipulación y análisis de datos.
+install.packages("dplyr")
+install.packages("tidyverse")
+```
+
+```{r}
+#leemos los archivos relevantes del gfts
+Trips <- read.csv("trips.txt")
+Frecuencias <- read.csv("frequencies.txt")
+Rutas <- read.csv("routes.txt")
+```
+
+Juntamos distintas bases de datos con columnas en común usando merge
+
+```{r}
+Mezcla1 <- merge(Frecuencias, Trips, by = "trip_id", all.x = TRUE)
+```
+
+```{r}
+datos_transporte <- merge(Mezcla1, Rutas, by = "route_id", all.x = TRUE)
+```
+
+Filtramos de la columna agency_id los datos que usaremos: Camiones Concesionados (CC) y Red de Transporte de Pasajeros (RTP). Guardamos todos los cambios en un csv
+
+```{r}
+datos_filtrado = datos_transporte[datos_transporte$agency_id %in% c("RTP", "CC"), ]
+write.csv(datos_filtrado, "Transporte.csv", row.names = FALSE)
+```
+
+Guardamos el csv en un dataframe
+
+```{r}
+Datos <- read.csv("Transporte.csv")
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Cargar datos de transporte
+df <- read.csv("Transporte.csv")
+
+# Agrupar los datos por 'agency_id' (tipo de transporte)
+# y calcular la cantidad total de registros (servicios) por cada grupo
+df_resumen <- df %>%
+  group_by(agency_id) %>%
+  summarise(total_servicios = n())
+
+# Gráfica de barras del total de servicios de transporte
+ggplot(df_resumen, aes(x = agency_id, y = total_servicios, fill = agency_id)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total de servicios por tipo de transporte",
+       x = "Tipo de transporte",
+       y = "Cantidad de servicios") +
+  scale_fill_manual(values = c("CC" = "#F8766D", "RTP" = "#00BFC4")) +
+  theme_minimal()
+```
+
+Este gráfico nos muestra la cantidad total de servicios proporcionados por cada agencia de transporte (agency_id). En la imagen generada, se observa que RTP ofrece significativamente más servicios (\~750) que CC (\~300), lo que sugiere una mayor cobertura de transporte por parte de RTP.
+
+```{r}
+ggplot(df, aes(x = agency_id, y = headway_secs, fill = agency_id)) +
+  geom_boxplot() +
+  labs(title = "Frecuencia entre unidades (headway_secs)",
+       x = "Tipo de transporte", y = "Segundos entre servicios") +
+  theme_minimal()
+```
+
+El diagrama de caja generado con los datos de headway_secs muestra de manera clara la distribución del tiempo entre servicios (frecuencia de paso) para los camiones concesionados y al sistema RTP (Red de Transporte de Pasajeros).
+
+Los resultados del gráfico indican que los camiones concesionados presentan menores tiempos entre unidades, es decir, circulan con mayor frecuencia que los RTP. Esto se observa en su menor mediana y menor dispersión en los tiempos entre servicios, lo cual sugiere que estos vehículos pasan más seguido y con mayor regularidad, al menos en los datos analizados.
+
+```{r}
+# Agrupamos el dataframe 'df' por el nombre corto de la ruta
+top_rutas <- df %>%
+  group_by(route_short_name) %>%
+# Contamos cuántos registros (servicios) hay por cada ruta
+  summarise(servicios = n()) %>%
+  # Ordenamos de mayor a menor según el número de servicios
+  arrange(desc(servicios)) %>%
+  # Seleccionamos solo las 10 rutas con más servicios
+  slice_head(n = 10)
+# Creamos un gráfico de barras horizontales con ggplot2
+ggplot(top_rutas, aes(x = reorder(route_short_name, servicios), y = servicios)) +
+  geom_col(fill = "steelblue") +
+  # Invertimos los ejes para que las rutas se vean en el eje y (más legible)
+  coord_flip() +
+  labs(title = "Top 10 rutas con más servicios", x = "Ruta", y = "Servicios") +
+  theme_minimal()
+
+```
+
+Las rutas Z1 (Zonal 1 Cuautepec), 200 (Metro 18 de Marzo – La Brecha) y 128 (Metro Martín Carrera – Col. Providencia) se encuentran entre las 10 con mayor número de servicios en la Ciudad de México, lo que refleja su alta demanda y relevancia en la movilidad del norte de la ciudad, especialmente en zonas como Cuautepec y Gustavo A. Madero, áreas caracterizadas por una alta densidad poblacional y desigualdad social. Estas rutas sirven como ejes clave de transporte para miles de personas que, debido a la lejanía de sus viviendas con respecto a zonas centrales o de empleo, dependen fuertemente de los camiones concesionados para su desplazamiento diario. La alta frecuencia observada indica no solo la presión sobre el sistema de transporte en estas áreas periféricas, sino también una respuesta a la necesidad de conectar zonas marginadas o de difícil acceso con el resto de la ciudad. Esto resalta cómo la movilidad en la CDMX sigue estando profundamente marcada por inequidades territoriales, donde las personas en zonas más desfavorecidas requieren más servicios para cubrir distancias mayores con más obstáculos. En este contexto, el transporte público concesionado funge como un mecanismo de integración social, pero también evidencia la brecha que existe en infraestructura y cobertura entre el centro y la periferia.
+
+Creamos un nuevo DataFrame para los contaminantes
+
+```{r}
+df <- read.csv("indice_2023.csv")
+colnames(df)
+```
+
+```{r}
+# Seleccionamos solo las columnas de interes
+# Primero, definimos las regiones y contaminantes con los que trabajaremos: PM10 y PM2.5
+regiones <- c("Fecha","Hora", "Noroeste.PM10", "Noreste.PM10","Noroeste.PM25", "Noreste.PM25", "Centro.PM10","Centro.PM25", "Suroeste.PM10", "Suroeste.PM25", "Sureste.PM10", "Sureste.PM25")
+
+
+# Filtramos el dataframe con esas columnas
+df_filtrado <- df [,regiones]
+
+# Visualizamos el resultado
+head(df_filtrado)
+
+#Guardamos en un csv para trabajar con el
+write.csv(df_filtrado, "Contaminantes_nuevo.csv", row.names = FALSE)
+
+```
+
+Creamos un nuevo dataframe
+
+```{r}
+df_contaminacion <- read.csv("Contaminantes.csv", stringsAsFactors = FALSE, check.names = FALSE)
+colnames(df_contaminacion)
+head(df_contaminacion)
+```
+
+```{r}
+df_contaminacion$Fecha <- as.Date(df_contaminacion$Fecha, format = "%d/%m/%Y")
+
+# Extraer el mes (formato año-mes) y conservar hora
+df_contaminacion$mes <- format(df_contaminacion$Fecha, "%Y-%m")
+df_contaminacion$hora <- df_contaminacion$Hora  # ya es numérico
+
+# Agrupar por mes y hora, sacar promedio
+promedios <- aggregate(cbind(Noroeste.PM10, Noroeste.PM25, Noreste.PM10, Noreste.PM25, Centro.PM10, Centro.PM25, Suroeste.PM10, Suroeste.PM25, Sureste.PM10, Sureste.PM25) ~ mes + hora, 
+                       data = df_contaminacion, FUN = mean, na.rm = TRUE)
+
+# Visualizamos los resultados
+print(promedios)
+```
+
+```{r}
+# Asignar franjas horarias personalizadas
+promedios$franja <- with(promedios, ifelse(hora >= 1 & hora <= 5, "01-05",
+                                    ifelse(hora >= 6 & hora <= 9, "06-09",
+                                    ifelse(hora >= 10 & hora <= 16, "10-16",
+                                    ifelse(hora >= 17 & hora <= 20, "17-20", "21-24")))))
+```
+
+```{r}
+# Agrupas múltiples columnas numéricas de concentración de contaminantes (PM10 y PM2.5)
+  # para distintas zonas
+promedios_franja <- aggregate(cbind(Noroeste.PM10, Noroeste.PM25, Noreste.PM10, Noreste.PM25, Centro.PM10, Centro.PM25, Suroeste.PM10, Suroeste.PM25, Sureste.PM10, Sureste.PM25) ~ mes + franja,
+                              data = promedios, FUN = mean, na.rm = TRUE)
+```
+
+```{r}
+#Visualizamos los resultados de promedio franja
+print(promedios_franja)
+```
+
+```{r}
+horarios <- read.csv("horarios_pico_cdmx.csv")
+# Combinamos (hacemos un merge) el dataframe 'promedios' con 'horarios', usando la columna 'hora' como clave de unión.
+#'all.x = TRUE' indica que se mantendrán todas las filas del dataframe 'promedios
+Relacion_poisson <- merge(promedios, horarios, by = "hora", all.x = TRUE)
+# Guardamos el nuevo dataframe combinado en un archivo CSV llamado 'horas_pico_nuevo.csv' sin incluir los nombres de las filas (row.names = FALSE)
+write.csv(Relacion_poisson, "horas_pico_nuevo.csv", row.names = FALSE)
+
+```
+
+```{r}
+# Cargar datos de las horas pico de la cdmx
+data <- read.csv("horas_pico.csv")
+# Modelo de regresión lineal
+modelo <- lm(Noroeste.PM10 ~ mes, data = data)
+# Resumen del modelo
+summary(modelo)
+```
+
+El modelo de regresión lineal que ocupamos en nuestro trabajo tiene como objetivo analizar cómo varía la concentración promedio de PM10 y PM25,para difentes regiones o zonas de la cdmx a lo largo de diferentes meses del año 2023. En este caso la variable dependiente es el contaminante en la region de la ciudad y la variable independiente categórica es mes, que incluye los niveles: enero (mes de referencia), febrero, marzo, abril, mayo, junio y julio.
+
+Para el primer caso el intercepto del modelo es 78.22, lo que representa la concentración promedio de PM10 en enero de 2023. Los coeficientes estimados para los demás meses indican cuánto se desvía la concentración respecto a ese valor base. Por ejemplo,se nos indica que para el mes de febrero, el valor promedio aumenta 3.36 unidades con respecto a enero, mientras que en abril disminuye en 14.52 unidades. El mes con la mayor reducción es julio, con un descenso de 30.68 unidades en comparación con enero.
+
+Todos los coeficientes son estadísticamente significativos (p \< 2e-16), lo que indica que las diferencias mensuales en la concentración de PM10 son altamente significativas desde un punto de vista estadístico. Además, el modelo tiene un R-cuadrado ajustado de 0.9989, lo cual sugiere que el 99.89% de la variabilidad en los valores de PM10 puede explicarse por el mes del año. Podemos decir que el ajuste es muy alto, lo que indica una relación muy fuerte entre la variable temporal (mes) y las concentraciones de contaminante.
+
+Los residuos del modelo (diferencias entre los valores observados y los predichos) son muy pequeños, con un error estándar residual de apenas 0.3999. Esto refuerza la calidad del ajuste y la precisión del modelo para describir los cambios mensuales en la concentración de PM10.
+
+```{r}
+# Modelo de regresión lineal
+modelo2 <- lm(Noroeste.PM25 ~ mes, data = data)
+# Resumen del modelo
+summary(modelo2)
+```
+
+Ahora para la región Noroeste de la Ciudad de México a lo largo de distintos meses del año 2023. El valor base del modelo (intercepto) corresponde al mes de enero, con una concentración estimada de 74.09 μg/m³.
+
+En comparación con enero, todos los meses siguientes presentan una reducción significativa en los niveles de PM2.5. Por ejemplo, en febrero y marzo las disminuciones son moderadas (de alrededor de 6.46 y 3.90 unidades, respectivamente), pero a partir de abril se observa una caída mucho más pronunciada, alcanzando una disminución máxima de más de 63 unidades en junio. Curiosamente, en julio los valores repuntan un poco, aunque siguen siendo más bajos que en enero.
+
+El modelo muestra una capacidad explicativa muy alta, con un R-cuadrado ajustado de 97.7%, lo cual significa que los cambios mensuales explican casi toda la variabilidad observada en los datos. La significancia estadística de todos los coeficientes refuerza la idea de que el mes tiene un efecto claro sobre los niveles de contaminación por PM2.5.
+
+```{r}
+# Modelo de regresión lineal
+modelo3 <- lm(Noreste.PM10 ~ mes, data = data)
+# Resumen del modelo
+summary(modelo3)
+```
+
+El modelo que analiza los niveles de PM10 en la región Noreste muestra que en enero los valores son bastante altos, cerca de 98, pero a medida que avanzan los meses del año, estos niveles disminuyen de forma considerable. Por ejemplo, en julio el nivel de PM10 cae drásticamente, más de 60 puntos por debajo de enero, lo que indica una mejora significativa en la calidad del aire en ese período. Además, el ajuste del modelo es excelente, ya que explica casi el 100% de la variabilidad de los datos, y los errores son muy pequeños, lo que significa que las predicciones que hace son bastante precisas. Esto sugiere que el mes del año es un factor muy importante para entender cómo cambian los niveles de PM10 en esta región, y que el modelo captura muy bien esa tendencia de disminución progresiva a lo largo de los meses.
+
+```{r}
+# Modelo de regresión lineal
+modelo4 <- lm(Noreste.PM25 ~ mes, data = data)
+# Resumen del modelo
+summary(modelo4)
+```
+
+Para el caso de PM2.5 en la región Noreste se mmuestra que todas las variables mensuales incluidas en el modelo tienen coeficientes con valores altamente significativos (p \< 0.001), lo que indica que cada mes tiene un efecto estadísticamente significativo en los niveles de PM2.5 respecto al mes base. El intercepto, con un valor estimado de aproximadamente 74.77, representa el valor promedio de PM2.5. Los coeficientes negativos para los meses siguientes indican disminuciones significativas en las concentraciones de PM2.5 respecto a ese mes base, siendo julio 2023 el que presenta la mayor disminución (-22.93 unidades).
+
+El valor del estadístico F es extremadamente alto (16,920) con un p-valor prácticamente cero, lo que indica que el modelo completo explica muy bien la variabilidad de los datos y que las diferencias entre meses son estadísticamente muy significativas. Además, el coeficiente de determinación múltiple R² es 0.9984, lo que implica que el 99.84% de la variabilidad en las concentraciones de PM2.5 se explica por el modelo con la variable mes. Esto indica un ajuste excelente del modelo a los datos.
+
+El error estándar es bajo (0.2825), lo que indica que las predicciones del modelo se ajustan muy bien a los datos observados con poca dispersión alrededor de la línea de regresión.
+
+```{r}
+# Modelo de regresión lineal
+modelo5 <- lm(Suroeste.PM10 ~ mes, data = data)
+# Resumen del modelo
+summary(modelo5)
+```
+
+El modelo muestra que la concentración de PM10 en la región Suroeste cambia bastante dependiendo del mes. El valor base (el intercepto) es alrededor de 48.23, que sería la media del primer mes que estamos usando como referencia. Luego, vemos que en febrero 2023 la concentración subió cerca de 8.23 unidades, lo cual es un aumento significativo. Pero después, desde marzo hasta julio, la concentración baja de forma constante, con julio presentando la caída más fuerte, casi 20 unidades menos que el mes base.
+
+Todos los coeficientes son estadísticamente muy significativos (con p-valores mucho menores a 0.001), lo que confirma que estos cambios mensuales no son producto del azar. Además, el modelo explica casi el 99% de la variación en los niveles de PM10 (R² = 0.9899), lo que indica que el mes es una variable clave para entender cómo varían estas concentraciones en el tiempo.
+
+El estadístico F también es muy alto, con un valor que indica que el modelo en general es muy bueno para predecir las diferencias entre meses. El error estándar no es muy grande (0.81), lo que significa que las predicciones del modelo están bastante cerca de los valores reales.
+
+En resumen, el mes influye mucho en los niveles de PM10 en el Suroeste y el modelo captura muy bien esa tendencia, con un pico en febrero y luego una bajada progresiva hasta julio.
+
+```{r}
+# Modelo de regresión lineal
+modelo6 <- lm(Suroeste.PM25 ~ mes, data = data)
+# Resumen del modelo
+summary(modelo6)
+```
+
+El valor base para este caso de la zona Suroeste.PM25 está en unos 61.6, que sería más o menos el nivel en el mes de referencia (el primero que tenemos). En febrero baja un poco, pero nada muy fuerte, casi no se nota. Luego en marzo, abril y mayo sube, y de hecho mayo es cuando la contaminación está más alta, como 4 puntos arriba del primer mes.
+
+Después de mayo hay cambios: en junio y julio la contaminación baja bastante, especialmente en julio, donde baja como 9 puntos, que es un cambio bastante grande.
+
+Segun los resultados obtenidos el modelo dicen que sí hay una diferencia real en los niveles de contaminación mes a mes. Además, el modelo es bueno para explicar lo que está pasando, casi el 99.5% de la variación queda clara con solo ver el mes.
+
+El “F” que vemos, que es súper alto, también nos dice que el modelo está funcionando muy bien. Y los errores que quedan son pequeñitos, lo que significa que el modelo ajusta muy bien a los datos reales.
+
+Así que, en resumen, la contaminación PM2.5 en el Suroeste sube en primavera y luego baja fuerte en verano
+
+```{r}
+# Modelo de regresión lineal
+modelo7 <- lm(Sureste.PM10 ~ mes, data = data)
+# Resumen del modelo
+summary(modelo7)
+```
+
+Este modelo muestra cómo varían los niveles de PM10 en el Sureste a lo largo de los meses. El valor base en el mes de referencia es de aproximadamente 89.5, y a partir de ahí se observan disminuciones importantes en todos los meses siguientes. Por ejemplo, en febrero ya hay una baja considerable, y en julio la caída es muy pronunciada, con una disminución de más de 56 unidades respecto al primer mes. Todos los coeficientes son estadísticamente significativos, lo que indica que estas diferencias no son al azar. Además, el modelo explica muy bien la variación de los datos (con un R² de 0.9961) y tiene un error residual relativamente bajo, lo que refuerza su calidad. En resumen, se observa una tendencia clara de reducción en la concentración de PM10 a medida que avanzan los meses.
+
+```{r}
+# Modelo de regresión lineal
+modelo8 <- lm(Sureste.PM25 ~ mes, data = data)
+# Resumen del modelo
+summary(modelo8)
+```
+
+El análisis para PM2.5 en la región Sureste muestra una reducción bastante consistente mes con mes respecto al valor base (que ronda los 81.5). A lo largo del periodo, todos los coeficientes son negativos y altamente significativos, lo que indica una tendencia clara a la baja. En especial, julio presenta la caída más marcada, con más de 62 unidades por debajo del primer mes. El modelo tiene un excelente ajuste (R² de 0.9977), lo que significa que explica casi toda la variación en los datos, y el error estándar es bajo. En conjunto, esto sugiere que los niveles de PM2.5 han disminuido de forma significativa en el Sureste conforme avanzan los meses analizados.
+
+```{r}
+# Modelo de regresión lineal
+modelo9 <- lm(Centro.PM10 ~ mes, data = data)
+# Resumen del modelo
+summary(modelo9)
+```
+
+El modelo para PM10 en la región Centro indica que, aunque el valor inicial (intercepto) se sitúa en torno a 69.76, en febrero se observó un ligero aumento (1.19 unidades), mientras que a partir de marzo comienza una disminución sostenida. Esta caída se vuelve más pronunciada con el paso de los meses, destacando especialmente en julio, donde el valor desciende más de 38 unidades respecto al mes base. Todos los coeficientes son estadísticamente significativos y el modelo tiene un ajuste muy alto (R² ajustado de 0.9971), lo que confirma que la variación mensual explica casi por completo los cambios observados en los niveles de PM10. El error estándar de los residuos es bajo, lo cual sugiere que el modelo estima los valores con buena precisión. En resumen, el comportamiento de PM10 en esta zona muestra una clara tendencia descendente después de febrero.
+
+```{r}
+# Modelo de regresión lineal
+modelo10 <- lm(Centro.PM25 ~ mes, data = data)
+# Resumen del modelo
+summary(modelo10)
+```
+
+En este modelo, los niveles de PM2.5 en la región Centro arrancan con un valor promedio cercano a 73.9 en el mes base (enero). A partir de febrero, se observa una disminución progresiva mes a mes: primero leve (casi 7 unidades en febrero), luego más acentuada, especialmente en junio y julio, donde las reducciones llegan a casi 17 y 21 unidades respectivamente. Todos los coeficientes son estadísticamente significativos y el modelo explica muy bien la variación mensual en los datos (R² ajustado de 0.9501). Aunque el ajuste es algo menor que en los modelos anteriores, sigue siendo sólido. El error estándar residual es bajo, lo que indica que las predicciones son bastante precisas. En conjunto, el modelo muestra que, al igual que con PM10, los niveles de PM2.5 en esta zona tienden a disminuir a lo largo del tiempo.
+
+Los modelos de regresión ajustados muestran que en ambas regiones analizadas (Centro y Sureste), los niveles de contaminantes atmosféricos PM10 y PM2.5 presentan una tendencia mensual decreciente significativa a lo largo del periodo observado (de enero a julio de 2023). Esta disminución es clara en todos los modelos, con coeficientes negativos en los meses posteriores a enero y con valores p prácticamente nulos, lo que confirma la validez estadística de estos descensos. Además, los valores de R² ajustado en todos los casos superan el 0.95, lo cual indica que los modelos explican muy bien la variabilidad observada en los datos de contaminación. No obstante, el hecho de que los niveles iniciales (interceptos) sean tan altos en varios modelos —con concentraciones por encima de los límites recomendados por la OMS— sugiere que la contaminación atmosférica sigue siendo un problema importante, aunque esté disminuyendo.

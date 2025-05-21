@@ -1,0 +1,120 @@
+---
+title: "Influencia del transporte en la calidad del aire en CDMX"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    theme: 'flatly'
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(shiny)
+library(tidyverse)
+library(plotly)
+
+# Carga de datos
+contaminantes <- read_csv("Contaminantes_mensual.csv") 
+transporte <- read_csv("Transporte.csv")       
+
+# Procesamiento de contaminantes
+contaminantes_largo <- contaminantes %>%
+  pivot_longer(cols = -c(mes, hora),
+               names_to = "zona_tipo",
+               values_to = "valor") %>%
+  separate(zona_tipo, into = c("zona", "tipo"), sep = "\\.")
+
+# Procesamiento de transporte
+resumen_transporte <- transporte %>%
+  group_by(agency_id) %>%
+  summarise(unidades = n())
+```
+Column {data-width=700}
+-----------------------------------------------------------------------
+Page: Información {.fa-info-circle}
+=========================================================
+
+Column {data-width=100}
+-----------------------------------------------------------------------
+
+### Introducción
+
+Según Climate Watch (2022), México emitió aproximadamente 637 millones de toneladas de CO₂ equivalente, y las fuentes móviles —vehículos motorizados en circulación— constituyen un actor determinante en estas cifras. 
+
+La Secretaría de Medio Ambiente y Recursos Naturales (SEMARNAT) confirma que una cuarta parte del total nacional de emisiones de GEI proviene del sector transporte, lo que refuerza su relevancia en el deterioro ambiental y sus consecuencias sobre la salud pública.
+
+La exposición continua a partículas finas como las PM2.5 está científicamente vinculada a enfermedades respiratorias, cardiovasculares e incluso a muertes prematuras, lo que convierte a la contaminación atmosférica en una amenaza tangible para la salud humana.
+
+
+### Unidades de transporte por Agencia {.fa-bus}
+```{r}
+renderTable({
+  resumen_transporte
+})
+```
+
+Column {data-width=100}
+-----------------------------------------------------------------------
+
+### Grafico contaminantes por zona {.fa-smog}
+
+```{r}
+
+renderPlotly({
+  ggplotly(
+    ggplot(contaminantes_largo, aes(x = zona, y = valor, fill = tipo)) +
+      geom_boxplot() +
+      labs(title = "Distribución de PM10 y PM2.5 por zona") +
+      theme_minimal()
+  )
+})
+```
+Column {data-width=70}
+-----------------------------------------------------------------------
+
+
+### Tabla contaminantes promedio {.fa-smog}
+
+```{r}
+renderTable({
+  contaminantes_largo %>%
+    group_by(zona, tipo) %>%
+    summarise(promedio = mean(valor, na.rm = TRUE), .groups = "drop")
+})
+```
+
+Page: Distribución Geográfica {.fa-map}
+=========================================================
+
+Column {data-width=800}
+-----------------------------------------------------------------------
+### Distribución geográfica
+```{r mapa-rutas, message=FALSE, warning=FALSE}
+library(leaflet)
+library(dplyr)
+library(readr)
+
+# Carga los datos
+rutas <- read_csv("cconcesionado_rutas.csv")
+
+
+# Mapa básico con marcadores
+leaflet(rutas) %>%
+  addTiles() %>%
+  addCircleMarkers(
+    lng = ~X, 
+    lat = ~Y,
+    radius = 3,
+    color = "blue",
+
+ fillOpacity = 0.7,
+    popup = ~paste("Ruta:", RUTA) 
+  )
+```
+
+
+
+
+
+
